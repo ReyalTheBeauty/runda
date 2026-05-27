@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>商场幸运抽奖</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -84,11 +84,7 @@
   <div id="admin-page" class="hidden">
     <div class="text-center mb-6">
       <h1 class="text-4xl md:text-5xl font-bold text-red-500 text-shadow">🎉 商场幸运大抽奖 🎉</h1>
-      <p class="text-lg mt-3">当前参与人数：<span id="user-count" class="text-red-600 font-bold text-xl"></span> 人</p>
-      <div class="mt-6 inline-block bg-white p-4 rounded-xl shadow-lg">
-        <p>手机扫码参与抽奖</p>
-        <img id="qrcode-img" style="width:220px;height:220px;">
-      </div>
+      <p class="text-lg mt-3">当前参与人数：<span id="user-count" class="text-red-600 font-bold text-xl">0</span> 人</p>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-10">
@@ -106,7 +102,7 @@
 
     <div class="bg-white p-6 rounded-xl shadow-md">
       <h3 class="text-xl font-bold mb-4">🏆 中奖名单</h3>
-      <div id="winner-list"></div>
+      <div id="winner-list">暂无中奖人员</div>
     </div>
   </div>
 
@@ -124,9 +120,8 @@
 </div>
 
 <script>
-// 专属云数据库（跨设备实时同步）
-const BIN_ID = "67f62e71ad12ca1a7ba9df62";
-const API_KEY = "$2b$10$E7mH50nH0fNkQ1jL4aO0uP9eR7T6yU5I4O3P2A1S0D2F3G4H5J6K";
+// 用 localStorage 做临时共享数据（适合现场活动）
+const STORAGE_KEY = "lottery_data";
 
 let users = [];
 let winners = [];
@@ -144,29 +139,20 @@ const winBoxes = [
   document.getElementById("w5")
 ];
 
-// 读取云端数据
-async function fetchData() {
-  try {
-    const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-      headers: { "X-Master-Key": API_KEY }
-    });
-    const data = await res.json();
-    users = data.record?.users || [];
-    winners = data.record?.winners || [];
-    renderView();
-  } catch (e) {}
+// 读取本地存储
+function fetchData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    const data = JSON.parse(raw);
+    users = data.users || [];
+    winners = data.winners || [];
+  }
+  renderView();
 }
 
-// 保存到云端
-async function saveData() {
-  await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Master-Key": API_KEY
-    },
-    body: JSON.stringify({ users, winners })
-  });
+// 保存到本地存储
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ users, winners }));
 }
 
 // 渲染页面
@@ -190,9 +176,11 @@ if (isAdmin) {
   adminPage.classList.remove("hidden");
   followMask.classList.add("hide");
   fetchData();
+  // 每 1.5 秒刷新一次，模拟实时同步
   setInterval(fetchData, 1500);
 } else {
   joinPage.classList.remove("hidden");
+  fetchData();
 }
 
 // 关闭弹窗
@@ -211,7 +199,7 @@ document.getElementById("join-form").addEventListener("submit", async (e) => {
     return;
   }
 
-  await fetchData();
+  fetchData();
 
   if (users.some(u => u.phone === phone)) {
     alert("该手机号已报名！");
@@ -219,7 +207,7 @@ document.getElementById("join-form").addEventListener("submit", async (e) => {
   }
 
   users.push({ name, phone });
-  await saveData();
+  saveData();
 
   document.getElementById("success").classList.remove("hidden");
   e.target.reset();
@@ -227,6 +215,49 @@ document.getElementById("join-form").addEventListener("submit", async (e) => {
     document.getElementById("success").classList.add("hidden");
   }, 2000);
 });
+
+// 抽奖逻辑（简单版）
+let rolling = false;
+let rollInterval;
+
+document.getElementById("start").addEventListener("click", () => {
+  if (users.length === 0) {
+    alert("暂无参与人员！");
+    return;
+  }
+  rolling = true;
+  document.getElementById("start").disabled = true;
+  document.getElementById("stop").disabled = false;
+  winBoxes.forEach(box => box.classList.add("roll"));
+
+  rollInterval = setInterval(() => {
+    winBoxes.forEach(box => {
+      const randomUser = users[Math.floor(Math.random() * users.length)];
+      box.innerText = randomUser.name;
+    });
+  }, 100);
+});
+
+document.getElementById("stop").addEventListener("click", () => {
+  if (!rolling) return;
+  rolling = false;
+  clearInterval(rollInterval);
+  document.getElementById("start").disabled = false;
+  document.getElementById("stop").disabled = true;
+  winBoxes.forEach(box => box.classList.remove("roll"));
+
+  // 选出5个中奖者（不重复）
+  const shuffled = [...users].sort(() => 0.5 - Math.random());
+  const selected = shuffled.slice(0, 5);
+  winners = selected;
+  saveData();
+
+  selected.forEach((user, idx) => {
+    winBoxes[idx].innerText = user.name;
+  });
+  renderView();
+});
 </script>
+
 </body>
 </html>
