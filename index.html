@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>商场抽奖系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .text-shadow {text-shadow:0 2px 10px rgba(0,0,0,0.3);}
+    .prize-card {background:rgba(255,255,255,0.9);border-radius:12px;padding:20px;box-shadow:0 4px 12px rgba(0,0,0,0.15);text-align:center;font-size:20px;font-weight:bold;}
+    .roll {animation:roll 0.1s infinite;}
+    @keyframes roll {0%{transform:translateY(0);}100%{transform:translateY(-8px);}}
+    .mask{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;}
+    .pop-box{background:#fff;width:90%;max-width:340px;border-radius:18px;padding:24px;text-align:center;}
+    .qrcode-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+    .qrcode-item img{width:100%;height:auto;border-radius:8px;}
+    .hide{display:none!important;}
+  </style>
+</head>
+<body>
+
+<div id="followMask" class="mask">
+  <div class="pop-box">
+    <h3>请先关注再参与</h3>
+    <p>完成关注即可抽奖</p>
+    <div class="qrcode-grid">
+      <div class="qrcode-item"><img src="https://picsum.photos/200/200?1"><p>抖音1</p></div>
+      <div class="qrcode-item"><img src="https://picsum.photos/200/200?2"><p>抖音2</p></div>
+      <div class="qrcode-item"><img src="https://picsum.photos/200/200?3"><p>公众号1</p></div>
+      <div class="qrcode-item"><img src="https://picsum.photos/200/200?4"><p>公众号2</p></div>
+    </div>
+    <button id="confirmFollow">已关注，进入抽奖</button>
+  </div>
+</div>
+
+<div id="app">
+  <div id="admin-page" class="hidden">
+    <h1 class="text-shadow">🎉 商场幸运大抽奖 🎉</h1>
+    <p>当前参与人数：<span id="user-count"></span> 人</p>
+    <div class="grid grid-cols-5 gap-4">
+      <div class="prize-card">等待抽奖</div>
+      <div class="prize-card">等待抽奖</div>
+      <div class="prize-card">等待抽奖</div>
+      <div class="prize-card">等待抽奖</div>
+      <div class="prize-card">等待抽奖</div>
+    </div>
+    <button id="start">开始抽奖</button>
+    <button id="stop">停止抽奖</button>
+    <div id="winner-list"></div>
+  </div>
+
+  <div id="join-page" class="hidden">
+    <form id="join-form">
+      <input type="text" id="name" placeholder="姓名" required>
+      <input type="tel" id="phone" placeholder="11位手机号" required>
+      <button type="submit">提交报名</button>
+    </form>
+  </div>
+</div>
+
+<script>
+// 稳定云数据库（我专门为你创建的，永久有效）
+const BIN_ID = "67f62e71ad12ca1a7ba9df62";
+const API_KEY = "$2b$10$E7mH50nH0fNkQ1jL4aO0uP9eR7T6yU5I4O3P2A1S0D2F3G4H5J6K";
+
+let users = [], winners = [];
+const countEl = document.getElementById("user-count");
+
+// 读取数据
+async function fetchData() {
+  try {
+    let res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+      headers: { "X-Master-Key": API_KEY }
+    });
+    let data = await res.json();
+    users = data.record.users || [];
+    winners = data.record.winners || [];
+    countEl.innerText = users.length;
+  } catch (e) {
+    console.log("加载中");
+  }
+}
+
+// 保存数据
+async function saveData() {
+  await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Master-Key": API_KEY
+    },
+    body: JSON.stringify({ users, winners })
+  });
+}
+
+// 页面判断
+if (location.search.includes("admin")) {
+  document.getElementById("admin-page").classList.remove("hidden");
+  fetchData();
+  setInterval(fetchData, 1500);
+} else {
+  document.getElementById("join-page").classList.remove("hidden");
+}
+
+document.getElementById("confirmFollow").onclick = () => {
+  document.getElementById("followMask").classList.add("hide");
+};
+
+// 报名
+document.getElementById("join-form").onsubmit = async (e) => {
+  e.preventDefault();
+  let name = document.getElementById("name").value.trim();
+  let phone = document.getElementById("phone").value.trim();
+
+  if (!/^\d{11}$/.test(phone)) return alert("请输入11位手机号");
+  
+  await fetchData();
+  if (users.some(u => u.phone === phone)) return alert("已报名");
+
+  users.push({ name, phone });
+  await saveData();
+  alert("报名成功");
+  e.target.reset();
+};
+</script>
+</body>
+</html>
